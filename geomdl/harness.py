@@ -3,12 +3,15 @@
 
 One JSON job per line on standard input, as `oracle jobs geomdl` writes them; one JSON answer per
 line on standard output, every double written by repr, which reads back to the same bits. A job
-geomdl refuses answers `"values": null`.
+geomdl refuses answers `"values": null`: Python's own errors on a job it cannot evaluate, and
+geomdl's GeomdlException, which it raises for a knot inserted more times than the degree allows
+(the kernel refuses that insertion too, so both refusing agree).
 """
 import json
 import sys
 
 from geomdl import BSpline, NURBS, helpers, operations
+from geomdl.exceptions import GeomdlException
 
 
 def curve_of(job):
@@ -46,7 +49,9 @@ def main():
         job = json.loads(line)
         try:
             values = [repr(float(x)) for x in values_of(job)]
-        except (ValueError, IndexError, ZeroDivisionError, TypeError, AttributeError):
+        except (
+            GeomdlException, ValueError, IndexError, ZeroDivisionError, TypeError, AttributeError
+        ):
             values = None
         print(json.dumps({"id": job["id"], "values": values}))
 
