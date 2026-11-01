@@ -1,0 +1,19 @@
+# The ezpz oracle's harness: ezpz, Zoo's sketch solver (MIT), at the release the kernel's chapter 15.16
+# cites (commit 915882cc), answering the kernel's sketch jobs. Built by this repository's workflow and
+# never published.
+[package]
+name = "ezpz-oracle"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+# The solver under comparison, at the pinned release. MIT.
+ezpz = "=0.2.29"
+# One JSON job per line in, one JSON answer per line out. MIT OR Apache-2.0.
+serde_json = "=1.0.154"
+
+[profile.release]
+# The answers are compared within a tolerance, never bit for bit, so the usual release build serves.
+debug = false

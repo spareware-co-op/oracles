@@ -1,0 +1,15 @@
+# The fiksi oracle's harness: fiksi, Linebender's sketch solver (Apache-2.0 OR MIT), at the commit the
+# kernel's chapter 15.16 cites, answering the kernel's sketch jobs. fiksi is not on crates.io, so it
+# comes from its repository at that commit. Built by this repository's workflow and never published.
+[package]
+name = "fiksi-oracle"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[dependencies]
+# The solver under comparison, at the pinned commit. Apache-2.0 OR MIT.
+fiksi = { git = "https://github.com/endoli/fiksi", rev = "ff4850546738fb82e95ff27c4db63e924d938473" }
+# One JSON job per line in, one JSON answer per line out. MIT OR Apache-2.0.
+serde_json = "=1.0.154"

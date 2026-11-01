@@ -15,6 +15,8 @@ Each folder is one oracle: a `Dockerfile` whose base image is pinned by digest, 
 | --- | --- | --- |
 | [geomdl](geomdl) | MIT | NURBS basis, evaluation, knot operations |
 | [smlib-nlib](smlib-nlib) | Apache-2.0 | NLib's NURBS evaluation, knot insertion and removal and degree elevation; run twice, its answers compared bit for bit |
+| [ezpz](ezpz) | MIT | Sketch solving (G222), from a known truth; run twice, its answers compared byte for byte |
+| [fiksi](fiksi) | Apache-2.0 OR MIT | Sketch solving (G222) on the rules fiksi states, from a known truth; run twice, its answers compared byte for byte |
 | [manifold](manifold) | Apache-2.0 | Mesh booleans |
 | [cgal](cgal) | GPL-3.0-or-later | Mesh booleans on Nef polyhedra, compared exactly |
 | [cherchi](cherchi) | MIT, with LGPL-3.0-or-later predicates | Mesh booleans |
