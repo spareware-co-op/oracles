@@ -1,0 +1,139 @@
+name: Oracles nightly
+
+# Each oracle's image is built from its pinned source and run against the night's jobs from the
+# kernel's repository. Images stay in this repository's Actions cache (Docker Buildx's gha cache) and
+# are never pushed anywhere (29.20, rule 8, of the kernel architecture); the audit step holds this
+# file to that. The kernel's `oracle compare` fails only on a difference nobody has triaged.
+
+on:
+  schedule:
+    # An hour after the kernel's nightly.
+    - cron: "17 14 * * *"
+  workflow_dispatch:
+    inputs:
+      kernel_ref:
+        description: "The kernel's branch or commit to compare"
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.99.0"
+  JOBS: "20000"
+  MESH_JOBS: "2000"
+
+jobs:
+  # The kernel's oracle tool reaches main with its piece. Until then a night has nothing to run.
+  ready:
+    name: The kernel's oracle tool is on this ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tool: ${{ steps.tool.outputs.tool }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: spareware-co-op/spareware
+          ref: ${{ inputs.kernel_ref || 'main' }}
+          persist-credentials: false
+          sparse-checkout: projects/engines/geometry/crates/geom-test/src/bin
+      - id: tool
+        run: |
+          if [ -f projects/engines/geometry/crates/geom-test/src/bin/oracle.rs ]; then
+            echo "tool=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::the kernel at this ref has no oracle tool yet"
+          fi
+
+  geomdl:
+    name: geomdl on NURBS
+    needs: ready
+    if: needs.ready.outputs.tool == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: oracles
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: spareware-co-op/spareware
+          ref: ${{ inputs.kernel_ref || 'main' }}
+          persist-credentials: false
+          path: kernel
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Nothing here can publish, and every base image is pinned
+        working-directory: kernel
+        run: cargo run --locked --release -p geom-test --bin oracle -- check --repository "$GITHUB_WORKSPACE/oracles"
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: The image, from its pinned source
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: oracles/geomdl
+          load: true
+          push: false
+          tags: oracle-geomdl:local
+          cache-from: type=gha,scope=geomdl
+          cache-to: type=gha,scope=geomdl,mode=max
+      - name: Tonight's jobs, the oracle's answers, and the comparison
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "seed: $seed"
+          cargo run --locked --release -p geom-test --bin oracle -- jobs geomdl --seed "$seed" --count "$JOBS" > "$RUNNER_TEMP/jobs.jsonl"
+          docker run --rm -i oracle-geomdl:local < "$RUNNER_TEMP/jobs.jsonl" > "$RUNNER_TEMP/answers.jsonl"
+          cargo run --locked --release -p geom-test --bin oracle -- compare geomdl --jobs "$RUNNER_TEMP/jobs.jsonl" --answers "$RUNNER_TEMP/answers.jsonl"
+
+  meshes:
+    name: ${{ matrix.oracle }} on mesh booleans
+    needs: ready
+    if: needs.ready.outputs.tool == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        oracle: [manifold, cgal, cherchi]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: oracles
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: spareware-co-op/spareware
+          ref: ${{ inputs.kernel_ref || 'main' }}
+          persist-credentials: false
+          path: kernel
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Nothing here can publish, and every base image is pinned
+        working-directory: kernel
+        run: cargo run --locked --release -p geom-test --bin oracle -- check --repository "$GITHUB_WORKSPACE/oracles"
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: The image, from its pinned source
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: oracles/${{ matrix.oracle }}
+          load: true
+          push: false
+          tags: oracle-${{ matrix.oracle }}:local
+          cache-from: type=gha,scope=${{ matrix.oracle }}
+          cache-to: type=gha,scope=${{ matrix.oracle }},mode=max
+      - name: Tonight's jobs, the oracle's answers, and the comparison
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "seed: $seed"
+          cargo run --locked --release -p geom-test --bin oracle -- jobs "${{ matrix.oracle }}" --seed "$seed" --count "$MESH_JOBS" > "$RUNNER_TEMP/jobs.jsonl"
+          docker run --rm -i oracle-${{ matrix.oracle }}:local < "$RUNNER_TEMP/jobs.jsonl" > "$RUNNER_TEMP/answers.jsonl"
+          cargo run --locked --release -p geom-test --bin oracle -- compare "${{ matrix.oracle }}" --jobs "$RUNNER_TEMP/jobs.jsonl" --answers "$RUNNER_TEMP/answers.jsonl"
