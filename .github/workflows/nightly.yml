@@ -91,6 +91,54 @@ jobs:
           docker run --rm -i oracle-geomdl:local < "$RUNNER_TEMP/jobs.jsonl" > "$RUNNER_TEMP/answers.jsonl"
           cargo run --locked --release -p geom-test --bin oracle -- compare geomdl --jobs "$RUNNER_TEMP/jobs.jsonl" --answers "$RUNNER_TEMP/answers.jsonl"
 
+  # SMLib's NLib layer, which decision 32.23 limits to evaluation, knot insertion and removal and
+  # degree elevation. It runs twice in fresh processes, since a class counts only while its runs agree
+  # bit for bit (32.23); a job that reaches a barred routine stops the run, so it can never pass.
+  smlib-nlib:
+    name: SMLib's NLib on NURBS
+    needs: ready
+    if: needs.ready.outputs.tool == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: oracles
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: spareware-co-op/spareware
+          ref: ${{ inputs.kernel_ref || 'main' }}
+          persist-credentials: false
+          path: kernel
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Nothing here can publish, and every base image is pinned
+        working-directory: kernel
+        run: cargo run --locked --release -p geom-test --bin oracle -- check --repository "$GITHUB_WORKSPACE/oracles"
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: The image, from its pinned source
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: oracles/smlib-nlib
+          load: true
+          push: false
+          tags: oracle-smlib-nlib:local
+          cache-from: type=gha,scope=smlib-nlib
+          cache-to: type=gha,scope=smlib-nlib,mode=max
+      - name: Tonight's jobs, the oracle's answers twice, and the comparison
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "seed: $seed"
+          cargo run --locked --release -p geom-test --bin oracle -- jobs smlib-nlib --seed "$seed" --count "$JOBS" > "$RUNNER_TEMP/jobs.jsonl"
+          docker run --rm -i oracle-smlib-nlib:local < "$RUNNER_TEMP/jobs.jsonl" > "$RUNNER_TEMP/answers.jsonl"
+          docker run --rm -i oracle-smlib-nlib:local < "$RUNNER_TEMP/jobs.jsonl" > "$RUNNER_TEMP/again.jsonl"
+          cmp "$RUNNER_TEMP/answers.jsonl" "$RUNNER_TEMP/again.jsonl"
+          cargo run --locked --release -p geom-test --bin oracle -- compare smlib-nlib --jobs "$RUNNER_TEMP/jobs.jsonl" --answers "$RUNNER_TEMP/answers.jsonl"
+
   meshes:
     name: ${{ matrix.oracle }} on mesh booleans
     needs: ready
