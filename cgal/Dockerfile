@@ -10,6 +10,7 @@ RUN git init /src && cd /src \
     && git checkout FETCH_HEAD
 COPY harness.cpp /oracle/
 RUN cd /oracle && includes=$(for d in /src/*/include; do printf -- '-I%s ' "$d"; done) \
-    && g++ -std=c++17 -O2 $includes -DCGAL_DISABLE_ROUNDING_MATH_CHECK harness.cpp -o harness \
+    && g++ -std=c++17 -O2 $includes -DCGAL_USE_GMP -DCGAL_USE_MPFR \
+        -DCGAL_DISABLE_ROUNDING_MATH_CHECK harness.cpp -o harness \
         -lmpfr -lgmp
 ENTRYPOINT ["/oracle/harness"]

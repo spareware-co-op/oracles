@@ -64,7 +64,8 @@ int main() {
       }
       answer["volume"] = text(made.Volume());
       answer["area"] = text(made.SurfaceArea());
-      answer["tolerance"] = text(made.GetTolerance());
+      // Manifold's epsilon: how far its rounding may have moved a vertex (epsilon-validity).
+      answer["tolerance"] = text(made.GetEpsilon());
       answer["triangles"] = triangles;
     }
     std::cout << answer.dump() << '\n';
