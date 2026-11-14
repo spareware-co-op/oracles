@@ -14,7 +14,6 @@
 #include <string>
 
 #include <CGAL/Exact_integer.h>
-#include <CGAL/Gmpq.h>
 #include <CGAL/Homogeneous.h>
 #include <CGAL/Nef_polyhedron_3.h>
 #include <CGAL/Polyhedron_3.h>
@@ -22,7 +21,8 @@
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
-using Kernel = CGAL::Homogeneous<CGAL::Exact_integer>;
+using Integer = CGAL::Exact_integer;
+using Kernel = CGAL::Homogeneous<Integer>;
 using Polyhedron = CGAL::Polyhedron_3<Kernel>;
 using Halfedges = Polyhedron::HalfedgeDS;
 using Nef = CGAL::Nef_polyhedron_3<Kernel>;
@@ -89,10 +89,16 @@ static std::string volume_of(const Nef& made) {
     }
   }
   // In lowest terms, so the fraction stays as short as the volume.
-  CGAL::Gmpq whole(six.numerator(), six.denominator());
-  whole /= CGAL::Gmpq(6);
+  const Integer numerator = six.numerator();
+  const Integer denominator = six.denominator();
+  const Integer six_times = denominator * Integer(6);
+  const Integer top = CGAL::abs(numerator);
+  const Integer bottom = CGAL::abs(six_times);
+  const Integer common = CGAL::gcd(top, bottom);
+  const Integer reduced_top = top / common;
+  const Integer reduced_bottom = bottom / common;
   std::ostringstream written;
-  written << CGAL::abs(whole.numerator()) << '/' << whole.denominator();
+  written << reduced_top << '/' << reduced_bottom;
   return written.str();
 }
 
