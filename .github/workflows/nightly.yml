@@ -209,9 +209,21 @@ jobs:
           set -euo pipefail
           seed=$(printf '%016x' "$GITHUB_RUN_ID")
           echo "seed: $seed"
-          cargo run --locked --release -p geom-test --bin oracle -- jobs "${{ matrix.oracle }}" --seed "$seed" --count "$MESH_JOBS" > "$RUNNER_TEMP/jobs.jsonl"
-          docker run --rm -i oracle-${{ matrix.oracle }}:local < "$RUNNER_TEMP/jobs.jsonl" > "$RUNNER_TEMP/answers.jsonl"
-          cargo run --locked --release -p geom-test --bin oracle -- compare "${{ matrix.oracle }}" --jobs "$RUNNER_TEMP/jobs.jsonl" --answers "$RUNNER_TEMP/answers.jsonl"
+          night="$RUNNER_TEMP/night"
+          mkdir -p "$night"
+          cargo run --locked --release -p geom-test --bin oracle -- jobs "${{ matrix.oracle }}" --seed "$seed" --count "$MESH_JOBS" > "$night/jobs.jsonl"
+          docker run --rm -i oracle-${{ matrix.oracle }}:local < "$night/jobs.jsonl" > "$night/answers.jsonl"
+          cargo run --locked --release -p geom-test --bin oracle -- compare "${{ matrix.oracle }}" --jobs "$night/jobs.jsonl" --answers "$night/answers.jsonl" | tee "$night/compare.txt"
+      # Every difference is kept with its signature for triage (28.10): the jobs, the answers and
+      # the comparison, whatever the comparison found.
+      - name: The night's jobs, answers and differences, kept for triage
+        if: always() && steps.live.outputs.live == 'yes'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: meshes-${{ matrix.oracle }}
+          path: ${{ runner.temp }}/night
+          retention-days: 90
+          if-no-files-found: warn
 
   # The sketch solvers ezpz (KittyCAD, MIT) and fiksi (Linebender, Apache-2.0 OR MIT), the kernel's
   # chapter 15.16 differential partners for piece G222. Each job is drawn from a known truth and the

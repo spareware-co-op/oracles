@@ -3,8 +3,9 @@
 // never linked.
 //
 // One JSON job per line on standard input, as `oracle jobs cgal` writes them; one JSON answer per
-// line on standard output, the regularised result's volume as an exact fraction. The result is cut
-// into convex pieces, so a body that is not a manifold is measured like any other.
+// line on standard output, the regularised result's volume as an exact fraction in lowest terms.
+// The volume is read straight off the result's boundary, so a body that is not a manifold (two
+// pieces meeting along an edge or at a corner) is measured like any other.
 
 #include <cstddef>
 #include <exception>
@@ -17,11 +18,11 @@
 #include <CGAL/Nef_polyhedron_3.h>
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Polyhedron_incremental_builder_3.h>
-#include <CGAL/convex_decomposition_3.h>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
-using Kernel = CGAL::Homogeneous<CGAL::Exact_integer>;
+using Integer = CGAL::Exact_integer;
+using Kernel = CGAL::Homogeneous<Integer>;
 using Polyhedron = CGAL::Polyhedron_3<Kernel>;
 using Halfedges = Polyhedron::HalfedgeDS;
 using Nef = CGAL::Nef_polyhedron_3<Kernel>;
@@ -64,36 +65,40 @@ static FT determinant(const Point& a, const Point& b, const Point& c) {
          a.z() * (b.x() * c.y() - b.y() * c.x());
 }
 
-// Six times the volume of one closed convex piece.
-static FT six_volume(const Polyhedron& piece) {
+// The volume by the divergence theorem over the boundary: every halffacet that faces the inside
+// (its own volume marked, its twin's not), each of its cycles fanned from its first corner. A
+// halffacet's cycles all run one way about its plane, holes against the outline, and every such
+// halffacet faces the inside, so the sum is six times the volume, of one sign throughout.
+static std::string volume_of(const Nef& made) {
   FT six(0);
-  for (auto facet = piece.facets_begin(); facet != piece.facets_end(); ++facet) {
-    auto edge = facet->facet_begin();
-    const Point first = edge->vertex()->point();
-    ++edge;
-    auto next = edge;
-    ++next;
-    for (; next != facet->facet_begin(); ++edge, ++next) {
-      six += determinant(first, edge->vertex()->point(), next->vertex()->point());
+  for (auto facet = made.halffacets_begin(); facet != made.halffacets_end(); ++facet) {
+    if (!facet->incident_volume()->mark() || facet->twin()->incident_volume()->mark()) continue;
+    for (auto cycle = facet->facet_cycles_begin(); cycle != facet->facet_cycles_end(); ++cycle) {
+      // A cycle that is a lone loop has no corners, and bounds no area.
+      if (!cycle.is_shalfedge()) continue;
+      Nef::SHalfedge_const_handle start(cycle);
+      Nef::SHalfedge_around_facet_const_circulator edge(start), end(edge);
+      const Point first = edge->source()->center_vertex()->point();
+      ++edge;
+      auto next = edge;
+      ++next;
+      for (; next != end; ++edge, ++next) {
+        six += determinant(first, edge->source()->center_vertex()->point(),
+                           next->source()->center_vertex()->point());
+      }
     }
   }
-  return CGAL::abs(six);
-}
-
-static std::string volume_of(Nef made) {
-  CGAL::convex_decomposition_3(made);
-  FT six(0);
-  auto volume = made.volumes_begin();
-  // The first volume is the outside.
-  for (++volume; volume != made.volumes_end(); ++volume) {
-    if (!volume->mark()) continue;
-    Polyhedron piece;
-    made.convert_inner_shell_to_polyhedron(volume->shells_begin(), piece);
-    six += six_volume(piece);
-  }
-  const FT whole = six / FT(6);
+  // In lowest terms, so the fraction stays as short as the volume.
+  const Integer numerator = six.numerator();
+  const Integer denominator = six.denominator();
+  const Integer six_times = denominator * Integer(6);
+  const Integer top = CGAL::abs(numerator);
+  const Integer bottom = CGAL::abs(six_times);
+  const Integer common = CGAL::gcd(top, bottom);
+  const Integer reduced_top = top / common;
+  const Integer reduced_bottom = bottom / common;
   std::ostringstream written;
-  written << CGAL::abs(whole.numerator()) << '/' << CGAL::abs(whole.denominator());
+  written << reduced_top << '/' << reduced_bottom;
   return written.str();
 }
 
