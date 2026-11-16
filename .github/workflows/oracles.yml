@@ -1,14 +1,17 @@
-name: Oracles nightly
+name: Oracles
 
-# Each oracle's image is built from its pinned source and run against the night's jobs from the
+# Each oracle's image is built from its pinned source and run against the run's jobs from the
 # kernel's repository. Images stay in this repository's Actions cache (Docker Buildx's gha cache) and
 # are never pushed anywhere (29.20, rule 8, of the kernel architecture); the audit step holds this
 # file to that. The kernel's `oracle compare` fails only on a difference nobody has triaged.
 
 on:
-  schedule:
-    # An hour after the kernel's nightly.
-    - cron: "17 14 * * *"
+  # A change to a harness here runs every oracle against the kernel's main; nothing runs on a
+  # timer (the kernel's decision 32.53). The kernel's own kernel-oracles.yml runs Manifold and
+  # CGAL on a push to its main and on its pull requests, at a pinned commit of this repository.
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
     inputs:
       kernel_ref:
@@ -27,7 +30,7 @@ env:
   SKETCH_JOBS: "5000"
 
 jobs:
-  # The kernel's oracle tool reaches main with its piece. Until then a night has nothing to run.
+  # The kernel's oracle tool reaches main with its piece. Until then a run has nothing to do.
   ready:
     name: The kernel's oracle tool is on this ref
     runs-on: ubuntu-latest
@@ -82,7 +85,7 @@ jobs:
           tags: oracle-geomdl:local
           cache-from: type=gha,scope=geomdl
           cache-to: type=gha,scope=geomdl,mode=max
-      - name: Tonight's jobs, the oracle's answers, and the comparison
+      - name: The run's jobs, the oracle's answers, and the comparison
         working-directory: kernel
         run: |
           set -euo pipefail
@@ -140,7 +143,7 @@ jobs:
           tags: oracle-smlib-nlib:local
           cache-from: type=gha,scope=smlib-nlib
           cache-to: type=gha,scope=smlib-nlib,mode=max
-      - name: Tonight's jobs, the oracle's answers twice, and the comparison
+      - name: The run's jobs, the oracle's answers twice, and the comparison
         if: steps.live.outputs.live == 'yes'
         working-directory: kernel
         run: |
@@ -202,26 +205,26 @@ jobs:
           tags: oracle-${{ matrix.oracle }}:local
           cache-from: type=gha,scope=${{ matrix.oracle }}
           cache-to: type=gha,scope=${{ matrix.oracle }},mode=max
-      - name: Tonight's jobs, the oracle's answers, and the comparison
+      - name: The run's jobs, the oracle's answers, and the comparison
         if: steps.live.outputs.live == 'yes'
         working-directory: kernel
         run: |
           set -euo pipefail
           seed=$(printf '%016x' "$GITHUB_RUN_ID")
           echo "seed: $seed"
-          night="$RUNNER_TEMP/night"
-          mkdir -p "$night"
-          cargo run --locked --release -p geom-test --bin oracle -- jobs "${{ matrix.oracle }}" --seed "$seed" --count "$MESH_JOBS" > "$night/jobs.jsonl"
-          docker run --rm -i oracle-${{ matrix.oracle }}:local < "$night/jobs.jsonl" > "$night/answers.jsonl"
-          cargo run --locked --release -p geom-test --bin oracle -- compare "${{ matrix.oracle }}" --jobs "$night/jobs.jsonl" --answers "$night/answers.jsonl" | tee "$night/compare.txt"
+          out="$RUNNER_TEMP/run"
+          mkdir -p "$out"
+          cargo run --locked --release -p geom-test --bin oracle -- jobs "${{ matrix.oracle }}" --seed "$seed" --count "$MESH_JOBS" > "$out/jobs.jsonl"
+          docker run --rm -i oracle-${{ matrix.oracle }}:local < "$out/jobs.jsonl" > "$out/answers.jsonl"
+          cargo run --locked --release -p geom-test --bin oracle -- compare "${{ matrix.oracle }}" --jobs "$out/jobs.jsonl" --answers "$out/answers.jsonl" | tee "$out/compare.txt"
       # Every difference is kept with its signature for triage (28.10): the jobs, the answers and
       # the comparison, whatever the comparison found.
-      - name: The night's jobs, answers and differences, kept for triage
+      - name: The run's jobs, answers and differences, kept for triage
         if: always() && steps.live.outputs.live == 'yes'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meshes-${{ matrix.oracle }}
-          path: ${{ runner.temp }}/night
+          path: ${{ runner.temp }}/run
           retention-days: 90
           if-no-files-found: warn
 
@@ -278,7 +281,7 @@ jobs:
           tags: oracle-${{ matrix.oracle }}:local
           cache-from: type=gha,scope=${{ matrix.oracle }}
           cache-to: type=gha,scope=${{ matrix.oracle }},mode=max
-      - name: Tonight's jobs, the oracle's answers twice, and the comparison
+      - name: The run's jobs, the oracle's answers twice, and the comparison
         if: steps.live.outputs.live == 'yes'
         working-directory: kernel
         run: |

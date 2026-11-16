@@ -9,7 +9,7 @@ The outside programs the Spare Kit geometry kernel is compared with, each run as
 - **No test data stored under GPL.** Data under the GPL is fetched at test time and never kept here.
 - **Numerical Recipes is never compiled.** Any build of SMLib stubs out the routines derived from it.
 
-Each folder is one oracle: a `Dockerfile` whose base image is pinned by digest, a harness that reads one JSON job per line and answers one JSON line per job, the pins of what it installs, and a `LICENSE` file: the licence that oracle's program requires (decision 32.6), so there is no licence for the repository as a whole. The nightly workflow writes the night's jobs with the kernel's `oracle jobs`, runs the image, and judges the answers with `oracle compare`, which fails only on a difference nobody has triaged.
+Each folder is one oracle: a `Dockerfile` whose base image is pinned by digest, a harness that reads one JSON job per line and answers one JSON line per job, the pins of what it installs, and a `LICENSE` file: the licence that oracle's program requires (decision 32.6), so there is no licence for the repository as a whole. The workflow, on a change to this repository or by hand, writes the run's jobs with the kernel's `oracle jobs`, runs the image, and judges the answers with `oracle compare`, which fails only on a difference nobody has triaged. The kernel's own `kernel-oracles.yml` runs Manifold and CGAL on its pushes to main and its pull requests, at a pinned commit of this repository. Nothing runs on a timer.
 
 | Oracle | Licence of the program | Checks |
 | --- | --- | --- |
